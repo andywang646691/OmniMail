@@ -510,6 +510,13 @@ Worker 文件，剩余路径仍会匹配 `*` 并正常部署。Build watch paths
 | `SENDFLARE_API_KEY` | Secret | SendFlare 全局主动发信与回复 |
 | `SENDFLARE_FROM` | Text | 可选固定发件邮箱地址，例如 `reply@example.com` |
 | `SENDFLARE_DOMAIN_CONFIGS` | Secret | 按发件域名配置独立的 SendFlare API Key 与可选发件邮箱 |
+| `SES_DOMAIN_CONFIGS` | Secret | 按发件域名配置 Amazon SES 区域与 AWS 凭证，适合多个站点共用一个 AWS 账号 |
+| `SES_REGION` | Text | 全局 Amazon SES 区域，例如 `us-east-1` |
+| `SES_ACCESS_KEY_ID` | Secret | 全局 Amazon SES Access Key ID，需与下面两项同时配置 |
+| `SES_SECRET_ACCESS_KEY` | Secret | 全局 Amazon SES Secret Access Key |
+| `SES_SESSION_TOKEN` | Secret | 可选：临时凭证的 session token |
+| `SES_FROM` | Text | 可选固定发件邮箱地址，支持 `support@example.com` 或 `名称 <support@example.com>` |
+| `SES_CONFIGURATION_SET` | Text | 可选 Amazon SES Configuration Set 名称 |
 | `TOTP_ENCRYPTION_KEY` | Secret | 至少 32 个随机字符，用于加密管理员 TOTP 密钥 |
 | `MAIL_CREDENTIALS_KEY` | Secret | 推荐：至少 32 个随机 UTF-8 字节，统一加密全部外部邮箱凭据；旧部署可继续使用下列独立密钥 |
 | `ICLOUD_CREDENTIALS_KEY` | Secret | 至少 32 字节，用于加密 iCloud Cookie 与应用专用密码；不使用 iCloud 功能时可留空 |
@@ -579,6 +586,45 @@ SENDFLARE_FROM=reply@example.com
 
 SendFlare 当前发送接口没有附件字段。含附件邮件若存在可用 Resend 配置，会自动改用
 Resend；否则任务会明确失败，不会丢弃附件后继续发送。
+
+Amazon SES 通过 SES v2 HTTP API 发送原始 MIME，因此附件、`In-Reply-To`/`References`
+与中文主题都走同一条路径，不依赖第三方附件字段。SES 的身份数量只受 AWS 账户配额限制
+（默认每个区域 10,000 个），适合给大量站点分别配置发信域名：
+
+```json
+{
+  "example.com": {
+    "region": "us-east-1",
+    "accessKeyId": "AKIA...",
+    "secretAccessKey": "...",
+    "from": "support@example.com"
+  },
+  "another.example": {
+    "region": "us-east-1",
+    "accessKeyId": "AKIA...",
+    "secretAccessKey": "...",
+    "configurationSetName": "omnimail"
+  }
+}
+```
+
+也可以只配置一套全局凭证，让所有未单独配置的域名共用：
+
+```text
+SES_REGION=us-east-1
+SES_ACCESS_KEY_ID=AKIA...
+SES_SECRET_ACCESS_KEY=...
+SES_FROM=support@example.com
+SES_CONFIGURATION_SET=omnimail
+```
+
+把域名 JSON 保存为 `SES_DOMAIN_CONFIGS` Secret。发信服务选择顺序为：SendFlare 域名配置 →
+Resend 域名配置 → SES 域名配置 → 全局 SendFlare → 全局 SES。每个发信域名都需要在 SES
+中完成身份验证（Easy DKIM 的 3 条 CNAME 记录），并且 IAM 主体至少具备
+`ses:SendEmail` 与 `ses:SendRawEmail` 权限。SES 没有幂等键，因此网络异常时任务会
+标记为“投递结果不确定”并停止自动重试，避免重复发信；4xx 拒绝（域名未验证、
+账号暂停等）会立即失败而不是重试。SES 对原始邮件有 10 MB 上限（附件会因 base64
+膨胀约 1.37 倍），超过上限时会立即返回明确错误，不会把超大附件发出去。
 
 发信请求会先持久化并进入 Queue，再由后台任务调用选定的发信服务。
 主动发件、草稿发送与回复按用户合并限速，默认每分钟最多 10 封、每个 UTC 自然日

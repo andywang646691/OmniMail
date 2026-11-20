@@ -418,7 +418,7 @@ Content-Type: application/json
 ```
 
 发件邮箱必须属于当前用户且处于启用状态，用户需要具备发信权限，并且该域名已配置
-Resend 或 SendFlare 发信服务。
+Resend、SendFlare 或 Amazon SES 发信服务。
 接口同时保存纯文本和安全生成的 HTML 正文，并将结果写入“已发送”；同一个
 `idempotencyKey` 不会重复投递。
 
@@ -430,6 +430,7 @@ Resend 或 SendFlare 发信服务。
 `text`、`idempotencyKey` 和一个或多个 `attachments`。最多允许 5 个附件，单个不超过
 5 MiB，合计不超过 10 MiB。附件会与回复正文一起写入“已发送”并进入相同投递队列。
 SendFlare 本身不支持附件；对应域名同时配置 Resend 时自动改用 Resend，否则拒绝发送。
+Amazon SES 使用原始 MIME 发送，附件、回复头与多收件人都由同一路径处理。
 
 管理员通过以下接口管理限速：
 

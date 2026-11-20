@@ -110,6 +110,13 @@ export interface Env {
   SENDFLARE_API_KEY?: string
   SENDFLARE_FROM?: string
   SENDFLARE_DOMAIN_CONFIGS?: string
+  SES_DOMAIN_CONFIGS?: string
+  SES_REGION?: string
+  SES_ACCESS_KEY_ID?: string
+  SES_SECRET_ACCESS_KEY?: string
+  SES_SESSION_TOKEN?: string
+  SES_FROM?: string
+  SES_CONFIGURATION_SET?: string
   TOTP_ENCRYPTION_KEY?: string
   MAIL_CREDENTIALS_KEY?: string
   ICLOUD_CREDENTIALS_KEY?: string

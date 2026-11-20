@@ -1,5 +1,6 @@
 import { normalizeEmail, validEmail } from '../../shared/http/api-helpers'
 import { hasOutboundProviderConfig } from '../outbound/outbound-provider-config'
+import { hasSesConfig } from '../outbound/ses-config'
 import { resendWebhookSecrets } from '../outbound/resend-webhook'
 import { validSetupTokenSecret } from '../auth/setup/setup-security'
 import { iCloudCredentialsReady } from '../icloud/icloud-credentials'
@@ -232,8 +233,14 @@ export async function deploymentCheck(env: Env, user: SessionUser): Promise<Resp
     check({
       id: 'outbound-provider', group: 'mail', label: '发信与回复服务',
       ready: hasOutboundProviderConfig(env), required: false, missingState: 'warning',
-      detail: 'Resend 或 SendFlare 发信配置已就绪，具备主动发信与回复的条件。',
-      action: '不需要发信可以跳过；需要时配置 RESEND_DOMAIN_CONFIGS 或 SendFlare。',
+      detail: 'Resend、SendFlare 或 Amazon SES 发信配置已就绪，具备主动发信与回复的条件。',
+      action: '不需要发信可以跳过；需要时配置 RESEND_DOMAIN_CONFIGS、SendFlare 或 SES_DOMAIN_CONFIGS。',
+    }),
+    check({
+      id: 'ses-config', group: 'mail', label: 'Amazon SES 发信',
+      ready: hasSesConfig(env), required: false, missingState: 'warning',
+      detail: 'Amazon SES 域名与凭证已配置，可按域名发信并使用原始 MIME 附件。',
+      action: '配置 SES_DOMAIN_CONFIGS（每域名 region、accessKeyId、secretAccessKey），或全局 SES_REGION、SES_ACCESS_KEY_ID、SES_SECRET_ACCESS_KEY。',
     }),
     check({
       id: 'resend-webhook', group: 'mail', label: 'Resend 投递回执',
