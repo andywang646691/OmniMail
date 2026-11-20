@@ -5,6 +5,7 @@
  *   node scripts/ses-onboard.mjs <domain> --region us-east-1 \
  *     --from support@<domain> [--configuration-set omnimail] \
  *     [--out ./ses-domain-config.json] [--no-wait] [--dry-run] [--json]
+ *   node scripts/ses-onboard.mjs <domain> --check     # 只读：查身份/验证状态
  *
  * 凭证来源（按优先级）：
  *   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN 环境变量，
@@ -120,6 +121,23 @@ export async function getIdentity({ domain, region, credentials, http = fetch })
     credentials,
     http,
   })
+}
+
+export async function checkIdentity({ domain, region, credentials, http = fetch }) {
+  const response = await getIdentity({ domain, region, credentials, http })
+  if (response.status === 404) {
+    return { exists: false, verified: false, detail: 'SES 中不存在该身份' }
+  }
+  if (response.status !== 200) {
+    throw new SesOnboardError(`读取 SES 身份失败：${sesError(response)}`)
+  }
+  return {
+    exists: true,
+    verified: identityVerified(response),
+    detail: identityStatus(response),
+    dkimStatus: response.body?.DkimAttributes?.Status,
+    verifiedForSending: response.body?.VerifiedForSendingStatus === true,
+  }
 }
 
 export function identityVerified(response) {
@@ -314,6 +332,7 @@ export async function main(argv = process.argv.slice(2)) {
       credentials: { type: 'string' },
       'cf-token-file': { type: 'string' },
       out: { type: 'string' },
+      check: { type: 'boolean' },
       'no-wait': { type: 'boolean' },
       'dry-run': { type: 'boolean' },
       json: { type: 'boolean' },
@@ -324,7 +343,7 @@ export async function main(argv = process.argv.slice(2)) {
   })
   if (values.help || positionals.length !== 1) {
     console.log('用法：node scripts/ses-onboard.mjs <domain> [--region us-east-1] [--from support@domain] '
-      + '[--configuration-set name] [--out file] [--no-wait] [--dry-run] [--json]')
+      + '[--configuration-set name] [--out file] [--no-wait] [--dry-run] [--json] [--check]')
     return values.help ? 0 : 1
   }
   const credentials = values.credentials
@@ -335,6 +354,17 @@ export async function main(argv = process.argv.slice(2)) {
     || (values['cf-token-file']
       ? readFileSync(values['cf-token-file'], 'utf8').trim()
       : '')
+  if (values.check) {
+    const domain = positionals[0].trim().toLowerCase()
+    const status = await checkIdentity({ domain, region: values.region, credentials })
+    if (values.json) {
+      console.log(JSON.stringify({ domain, ...status }, null, 2))
+    } else {
+      console.log(`${domain}: ${status.detail}${status.verified ? '（可用于发信）' : ''}`)
+    }
+    if (!status.exists) return 1
+    return status.verified ? 0 : 3
+  }
   const result = await sesOnboard({
     domain: positionals[0].trim().toLowerCase(),
     region: values.region,

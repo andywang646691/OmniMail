@@ -628,7 +628,8 @@ npx wrangler secret put SES_DOMAIN_CONFIGS < ./ses-domain-config.json
 ```
 
 脚本退出码 `0` 表示已验证，`3` 表示 DNS 已写入但 SES 还在验证（可稍后重跑），`1` 表示失败。
-`--dry-run` 只打印将要写入的记录。写入的 Secret 文件权限为 `0600`，不要提交到仓库。
+`--dry-run` 只打印将要写入的记录；`--check` 是只读模式，只查该域在 SES 里的身份与验证状态
+（退出码同上，`1` 表示 SES 里还没有这个身份）。写入的 Secret 文件权限为 `0600`，不要提交到仓库。
 
 把域名 JSON 保存为 `SES_DOMAIN_CONFIGS` Secret。发信服务选择顺序为：SendFlare 域名配置 →
 Resend 域名配置 → SES 域名配置 → 全局 SendFlare → 全局 SES。每个发信域名都需要在 SES

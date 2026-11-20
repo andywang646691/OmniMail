@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  checkIdentity,
   createIdentity,
   dkimRecords,
   identityStatus,
@@ -221,6 +222,26 @@ describe('Amazon SES onboarding', () => {
     await expect(main(['example.com', '--dry-run'])).resolves.toBe(0)
     await expect(main(['example.com', '--no-wait'])).resolves.toBe(3)
     await expect(main([])).resolves.toBe(1)
+  })
+
+  it('checks an identity without touching DNS or Cloudflare', async () => {
+    const verified = fakeHttp({ identity: [verifiedIdentity] })
+    await expect(checkIdentity({
+      domain: 'example.com', region: 'us-east-1', credentials, http: verified.http,
+    })).resolves.toMatchObject({ exists: true, verified: true, dkimStatus: 'SUCCESS' })
+    expect(verified.calls.every((call) => !call.url.includes('api.cloudflare.com'))).toBe(true)
+
+    const pending = fakeHttp({
+      identity: [{ VerifiedForSendingStatus: false, DkimAttributes: { Status: 'PENDING', Tokens: tokens } }],
+    })
+    await expect(checkIdentity({
+      domain: 'example.com', region: 'us-east-1', credentials, http: pending.http,
+    })).resolves.toMatchObject({ exists: true, verified: false, dkimStatus: 'PENDING' })
+
+    const missing = vi.fn(async () => json(404, { message: 'Not found' }))
+    await expect(checkIdentity({
+      domain: 'example.com', region: 'us-east-1', credentials, http: missing,
+    })).resolves.toMatchObject({ exists: false, verified: false })
   })
 
   it('requires AWS credentials and a Cloudflare token', async () => {
