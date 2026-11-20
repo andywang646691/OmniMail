@@ -7,6 +7,7 @@ import {
   dkimRecords,
   identityStatus,
   identityVerified,
+  main,
   sesOnboard,
 } from './ses-onboard.mjs'
 
@@ -187,6 +188,39 @@ describe('Amazon SES onboarding', () => {
     })
 
     expect(result.status).toBe('pending')
+  })
+
+  it('runs the CLI entry point with exit codes 0 and 3', async () => {
+    vi.stubEnv('AWS_ACCESS_KEY_ID', 'AKIAEXAMPLE')
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'c2VjcmV0LWV4YW1wbGU')
+    vi.stubEnv('CLOUDFLARE_API_TOKEN', 'cf-token')
+    const pending = vi.fn(async (input: string | URL) => {
+      const url = String(input)
+      if (url === 'https://email.us-east-1.amazonaws.com/v2/email/identities') {
+        return json(200, { DkimAttributes: { Tokens: tokens, Status: 'NOT_STARTED' } })
+      }
+      if (url.includes('/v2/email/identities/')) {
+        return json(200, {
+          VerifiedForSendingStatus: false,
+          DkimAttributes: { Status: 'PENDING', Tokens: tokens },
+        })
+      }
+      if (url.includes('/zones?name=')) {
+        return json(200, { success: true, result: [{ id: 'zone1', name: 'example.com' }] })
+      }
+      if (url.includes('/dns_records?per_page=')) {
+        return json(200, { success: true, result: [] })
+      }
+      if (url.endsWith('/dns_records')) {
+        return json(200, { success: true, result: { id: 'record1' } })
+      }
+      return json(404, { success: false, errors: [{ message: url }] })
+    })
+    vi.stubGlobal('fetch', pending)
+
+    await expect(main(['example.com', '--dry-run'])).resolves.toBe(0)
+    await expect(main(['example.com', '--no-wait'])).resolves.toBe(3)
+    await expect(main([])).resolves.toBe(1)
   })
 
   it('requires AWS credentials and a Cloudflare token', async () => {
