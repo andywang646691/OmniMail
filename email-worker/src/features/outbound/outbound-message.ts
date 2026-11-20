@@ -8,6 +8,7 @@ import {
   OutboundProviderAcceptedError,
 } from './outbound-errors'
 import { deliverWithResend, deliverWithSendflare } from './outbound-http-provider'
+import { deliverWithSes } from './ses-provider'
 import { releaseStorage, reserveStorage } from '../messages/message-storage'
 import {
   outboundProviderConfigError,
@@ -521,6 +522,8 @@ export async function deliverOutboundMessage(env: Env, job: OutboundJob): Promis
     }
   } else if (provider?.provider === 'sendflare') {
     providerId = await deliverWithSendflare(provider, payload)
+  } else if (provider?.provider === 'ses') {
+    providerId = await deliverWithSes(provider, payload)
   } else if (provider) {
     providerId = await deliverWithResend(provider, payload)
   }
@@ -532,7 +535,8 @@ export async function deliverOutboundMessage(env: Env, job: OutboundJob): Promis
       WHERE id = ?`,
     ).bind(providerId, record.id).run()
   } catch (error) {
-    if (isLinuxDoMail || isQqMail || provider?.provider === 'sendflare') {
+    if (isLinuxDoMail || isQqMail
+      || provider?.provider === 'sendflare' || provider?.provider === 'ses') {
       throw new OutboundProviderAcceptedError(providerId, error)
     }
     throw error
