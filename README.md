@@ -631,6 +631,31 @@ npx wrangler secret put SES_DOMAIN_CONFIGS < ./ses-domain-config.json
 `--dry-run` 只打印将要写入的记录；`--check` 是只读模式，只查该域在 SES 里的身份与验证状态
 （退出码同上，`1` 表示 SES 里还没有这个身份）。写入的 Secret 文件权限为 `0600`，不要提交到仓库。
 
+### 新域名开通收信（一条命令）
+
+新站上线时，把「Cloudflare Email Routing → OmniMail Worker」这条收信链一次配好：
+
+```bash
+CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
+  node scripts/onboard-receive-domain.mjs <域名> [--mailbox support] [--dry-run]
+```
+
+脚本会：解析 zone → 开启 Email Routing（自动写 MX `route1/2/3.mx.cloudflare.net`
+与 SPF）→ 把 catch-all 指向 `omni-mail` Worker → 校验 MX → 在 D1 里登记域名与
+`<mailbox>@<域名>`（并写两条审计记录）→ 复查一遍。可重复执行：已开启的 routing、
+已指向 Worker 的 catch-all 与已存在的 D1 行都会跳过。
+
+需要一把 **账号级** Cloudflare API Token，权限最小集：`Zone Read`、
+`Zone Settings Read/Write`（Email Routing 的开关端点用这组）、
+`Email Routing Rules Read/Write`、`DNS Read`、`D1 Read/Write`。
+退出码：`0` 已开通；`2` 该域名在这个账号里没有 zone；`3` 配置已写但
+Email Routing 还没 ready；`1` 其它错误。
+
+收信地址必须**先存在**：OmniMail 按地址精确匹配 `mailboxes`（且 `domains.is_active=1`），
+未匹配的地址会被 `Mailbox unavailable` 拒收，除非把 setting
+`unassigned_mail_enabled` 改为 `1`（那样会落进隐藏信箱 `__unassigned__@omnimail.invalid`
+并保留 `delivered_to`）。
+
 把域名 JSON 保存为 `SES_DOMAIN_CONFIGS` Secret。发信服务选择顺序为：SendFlare 域名配置 →
 Resend 域名配置 → SES 域名配置 → 全局 SendFlare → 全局 SES。每个发信域名都需要在 SES
 中完成身份验证（Easy DKIM 的 3 条 CNAME 记录），并且 IAM 主体至少具备
